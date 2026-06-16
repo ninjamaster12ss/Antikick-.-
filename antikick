@@ -219,11 +219,11 @@ local function notify(msg)
     end)
 end
 
--- Send chat function (legacy first)
+-- Send chat function (legacy first, 0.05 delay)
 local function sendChat(message)
     if not message or message == "" then return end
 
-    task.wait(0.2)
+    task.wait(0.05)
 
     local ok1, err1 = pcall(function()
         local chatEvent = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 3)
@@ -350,7 +350,7 @@ local function checkItem(item, ownerName)
             if ownerName and whitelist[ownerName] then return end
             local target = ownerName or "all"
             sendChat(":ungear " .. target)
-            notify("⚙️ Gear detected on " .. (ownerName or "unknown") .. "!")
+            notify("Gear detected on " .. (ownerName or "unknown") .. "!")
         end
     end
 end
