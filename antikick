@@ -245,7 +245,7 @@ local function sendChat(message)
     local ok1, err1 = pcall(function()
         local chatEvent = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 3)
             :WaitForChild("SayMessageRequest", 3)
-        chatEvent:FireServer(message, "All")
+        chatEvent:FireServer(message, nil)
     end)
 
     if not ok1 then
@@ -273,7 +273,7 @@ local function checkItem(item, ownerName)
             if ownerName and whitelist[ownerName] then return end
             local target = ownerName or "all"
             sendChat(":ungear " .. target)
-            notify("Gear detected on " .. (ownerName or "unknown") .. "!")
+            notify("⚙️ Gear detected on " .. (ownerName or "unknown") .. "!")
         end
     end
 end
