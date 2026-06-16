@@ -4,10 +4,8 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Whitelist (these players will NOT be ungeared)
 local whitelist = {}
 
--- ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AntikickUI"
 screenGui.ResetOnSpawn = false
@@ -24,7 +22,7 @@ frame.BorderSizePixel = 0
 frame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 35)
+title.Size = UDim2.new(1, -60, 0, 35)
 title.Position = UDim2.new(0, 0, 0, 0)
 title.BackgroundColor3 = Color3.fromRGB(255, 238, 170)
 title.BackgroundTransparency = 0.80
@@ -34,6 +32,32 @@ title.TextColor3 = Color3.fromRGB(255, 232, 138)
 title.TextSize = 13
 title.Font = Enum.Font.Gotham
 title.Parent = frame
+
+-- Minimize button
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 28, 0, 35)
+minBtn.Position = UDim2.new(1, -58, 0, 0)
+minBtn.BackgroundColor3 = Color3.fromRGB(255, 238, 170)
+minBtn.BackgroundTransparency = 0.80
+minBtn.BorderSizePixel = 0
+minBtn.Text = "_"
+minBtn.TextColor3 = Color3.fromRGB(255, 232, 138)
+minBtn.TextSize = 14
+minBtn.Font = Enum.Font.GothamBold
+minBtn.Parent = frame
+
+-- Close button
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 35)
+closeBtn.Position = UDim2.new(1, -28, 0, 0)
+closeBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 150)
+closeBtn.BackgroundTransparency = 0.75
+closeBtn.BorderSizePixel = 0
+closeBtn.Text = "x"
+closeBtn.TextColor3 = Color3.fromRGB(255, 180, 180)
+closeBtn.TextSize = 14
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = frame
 
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 25)
@@ -94,9 +118,22 @@ wlInput.Font = Enum.Font.Gotham
 wlInput.ClearTextOnFocus = true
 wlInput.Parent = wlFrame
 
+-- Autocomplete suggestion label
+local wlSuggest = Instance.new("TextLabel")
+wlSuggest.Size = UDim2.new(0.9, 0, 0, 20)
+wlSuggest.Position = UDim2.new(0.05, 0, 0, 68)
+wlSuggest.BackgroundTransparency = 1
+wlSuggest.Text = ""
+wlSuggest.TextColor3 = Color3.fromRGB(200, 175, 80)
+wlSuggest.TextSize = 11
+wlSuggest.Font = Enum.Font.Gotham
+wlSuggest.TextXAlignment = Enum.TextXAlignment.Left
+wlSuggest.TextTransparency = 0.4
+wlSuggest.Parent = wlFrame
+
 local wlList = Instance.new("TextLabel")
 wlList.Size = UDim2.new(0.9, 0, 0, 60)
-wlList.Position = UDim2.new(0.05, 0, 0, 74)
+wlList.Position = UDim2.new(0.05, 0, 0, 90)
 wlList.BackgroundTransparency = 1
 wlList.Text = "No players whitelisted"
 wlList.TextColor3 = Color3.fromRGB(220, 200, 120)
@@ -106,13 +143,33 @@ wlList.TextWrapped = true
 wlList.TextYAlignment = Enum.TextYAlignment.Top
 wlList.Parent = wlFrame
 
--- Toggle whitelist open/close on title click
+-- Minimize / Close logic
+local minimized = false
 local wlOpen = false
+
+minBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        frame.Size = UDim2.new(0, 220, 0, 35)
+        wlFrame.Size = UDim2.new(0, 220, 0, 0)
+        wlOpen = false
+    else
+        frame.Size = UDim2.new(0, 220, 0, 110)
+    end
+end)
+
+closeBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+end)
+
+-- Toggle whitelist open/close on title click
 title.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or
        input.UserInputType == Enum.UserInputType.Touch then
-        wlOpen = not wlOpen
-        wlFrame.Size = UDim2.new(0, 220, 0, wlOpen and 145 or 0)
+        if not minimized then
+            wlOpen = not wlOpen
+            wlFrame.Size = UDim2.new(0, 220, 0, wlOpen and 165 or 0)
+        end
     end
 end)
 
@@ -162,10 +219,52 @@ local function notify(msg)
     end)
 end
 
+-- Send chat function (legacy first)
+local function sendChat(message)
+    if not message or message == "" then return end
+
+    task.wait(0.2)
+
+    local ok1, err1 = pcall(function()
+        local chatEvent = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 3)
+            :WaitForChild("SayMessageRequest", 3)
+        chatEvent:FireServer(message, nil)
+    end)
+
+    if not ok1 then
+        warn("Legacy chat failed: " .. tostring(err1))
+        local ok2, err2 = pcall(function()
+            local TextChatService = game:GetService("TextChatService")
+            local channel = TextChatService.TextChannels:WaitForChild("RBXGeneral", 3)
+            channel:SendAsync(message)
+        end)
+        if not ok2 then
+            warn("TextChatService fallback also failed: " .. tostring(err2))
+        end
+    end
+end
+
+-- Autocomplete logic
+local currentSuggestion = ""
+
+wlInput:GetPropertyChangedSignal("Text"):Connect(function()
+    local text = wlInput.Text
+    currentSuggestion = ""
+    wlSuggest.Text = ""
+    if text == "" then return end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():sub(1, #text) == text:lower() then
+            currentSuggestion = p.Name
+            wlSuggest.Text = "→ " .. p.Name
+            break
+        end
+    end
+end)
+
 -- Add to whitelist on Enter
 wlInput.FocusLost:Connect(function(enterPressed)
     if enterPressed then
-        local name = wlInput.Text:match("^%s*(.-)%s*$")
+        local name = currentSuggestion ~= "" and currentSuggestion or wlInput.Text:match("^%s*(.-)%s*$")
         if name and name ~= "" then
             if whitelist[name] then
                 whitelist[name] = nil
@@ -173,10 +272,13 @@ wlInput.FocusLost:Connect(function(enterPressed)
             else
                 whitelist[name] = true
                 notify("Added a nerd " .. name .. " to whitelist")
+                sendChat(":h " .. name .. " has been whitelisted!!")
             end
             updateWlList()
         end
         wlInput.Text = ""
+        wlSuggest.Text = ""
+        currentSuggestion = ""
     end
 end)
 
@@ -236,31 +338,6 @@ toggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Send chat function (legacy first)
-local function sendChat(message)
-    if not message or message == "" then return end
-
-    task.wait(0.2)
-
-    local ok1, err1 = pcall(function()
-        local chatEvent = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 3)
-            :WaitForChild("SayMessageRequest", 3)
-        chatEvent:FireServer(message, nil)
-    end)
-
-    if not ok1 then
-        warn("Legacy chat failed: " .. tostring(err1))
-        local ok2, err2 = pcall(function()
-            local TextChatService = game:GetService("TextChatService")
-            local channel = TextChatService.TextChannels:WaitForChild("RBXGeneral", 3)
-            channel:SendAsync(message)
-        end)
-        if not ok2 then
-            warn("TextChatService fallback also failed: " .. tostring(err2))
-        end
-    end
-end
-
 -- Detect gear
 local function isGear(tool)
     local handle = tool:FindFirstChild("Handle")
@@ -293,13 +370,11 @@ local function watchPlayer(p)
     end)
 end
 
--- Watch all current and future players
 Players.PlayerAdded:Connect(watchPlayer)
 for _, p in ipairs(Players:GetPlayers()) do
     watchPlayer(p)
 end
 
--- Also watch local backpack as fallback
 player.CharacterAdded:Connect(function()
     task.wait(1)
     local backpack = player:WaitForChild("Backpack", 10)
@@ -310,5 +385,4 @@ player.CharacterAdded:Connect(function()
     end
 end)
 
--- Startup notification
 notify("Anti-kick is running! ^_^")
